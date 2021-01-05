@@ -42,9 +42,9 @@ func main() {
 	}
 
 	for _, event := range events {
-		fmt.Printf("%s action=%s target=%s\n", event.AuthorUsername, event.Action, event.TargetTitle)
+		fmt.Printf("%s | %s | %s\n", event.AuthorUsername, event.Action, event.TargetTitle)
 		if event.Note != nil {
-			fmt.Printf("note: %+v\n", event.Note)
+			fmt.Printf("💬%s\t%s\n", event.Note.Body, event.Note.Resolved? "Resolved" : "")
 		}
 
 		fmt.Println("---")
