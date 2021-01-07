@@ -15,11 +15,19 @@ type Note struct {
 	Resolved bool
 }
 
+type Push struct {
+	Action      string
+	RefType     string `json:"ref_type"`
+	Ref         string
+	CommitTitle string `json:"commit_title"`
+}
+
 type Event struct {
 	AuthorUsername string `json:"author_username"`
 	Action         string `json:"action_name"`
 	TargetTitle    string `json:"target_title"`
 	Note           *Note
+	Push           *Push `json:"push_data"`
 }
 
 func main() {
@@ -48,9 +56,10 @@ func main() {
 			if event.Note.Resolved {
 				resolved = "👌"
 			}
-			fmt.Printf("💬 %s %s\n", event.Note.Body, resolved)
+			fmt.Printf("💬 %s %s", event.Note.Body, resolved)
+		} else if event.Push != nil {
+			fmt.Printf("⬆️  🌿 %s: %s", event.Push.Ref, event.Push.CommitTitle)
 		}
-
-		fmt.Println("---")
+		fmt.Println("\n─────────────────────")
 	}
 }
