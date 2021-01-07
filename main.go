@@ -50,9 +50,9 @@ func idSeen(id int64) bool {
 }
 
 func main() {
-	projectId := 138
+	projectId := os.Getenv("GITLAB_PROJECT")
 	token := os.Getenv("GITLAB_TOKEN")
-	url := fmt.Sprintf("https://gitlab.ppro.com/api/v4/projects/%d/events?private_token=%s", projectId, token)
+	url := fmt.Sprintf("https://gitlab.ppro.com/api/v4/projects/%s/events?private_token=%s", projectId, token)
 
 	GREEN := "\x1b[32m"
 	RESET := "\x1b[0m"
