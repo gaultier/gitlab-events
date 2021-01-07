@@ -50,7 +50,7 @@ func main() {
 	}
 
 	for _, event := range events {
-		fmt.Printf("🧍 %s %s: %s\n", event.AuthorUsername, event.Action, event.TargetTitle)
+		fmt.Printf("🧍 \x1b[32m%s\x1b[0m %s: %s\n", event.AuthorUsername, event.Action, event.TargetTitle)
 		if event.Note != nil {
 			resolved := ""
 			if event.Note.Resolved {
