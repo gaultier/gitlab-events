@@ -49,8 +49,12 @@ func main() {
 		log.Fatal(err)
 	}
 
+	GREEN := "\x1b[32m"
+	RESET := "\x1b[0m"
+	GRAY := "\x1b[38;5;250m"
+
 	for _, event := range events {
-		fmt.Printf("🧍 \x1b[32m%s\x1b[0m %s: %s\n", event.AuthorUsername, event.Action, event.TargetTitle)
+		fmt.Printf("🧍 %s%s%s %s%s: %s\n", GREEN, event.AuthorUsername, GRAY, event.Action, RESET, event.TargetTitle)
 		if event.Note != nil {
 			resolved := ""
 			if event.Note.Resolved {
@@ -60,6 +64,6 @@ func main() {
 		} else if event.Push != nil {
 			fmt.Printf("⬆️  🌿 %s: %s", event.Push.Ref, event.Push.CommitTitle)
 		}
-		fmt.Println("\n─────────────────────")
+		fmt.Println("\n──────────────────────────")
 	}
 }
