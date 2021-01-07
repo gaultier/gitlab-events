@@ -106,7 +106,7 @@ func main() {
 			} else if event.Push != nil {
 				fmt.Printf("⬆️  🌿 %s: %s", event.Push.Ref, event.Push.CommitTitle)
 			}
-			fmt.Println("\n──────────────────────────")
+			fmt.Println("\n")
 		}
 
 		time.Sleep(1 * time.Second)
