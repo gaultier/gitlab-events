@@ -51,7 +51,14 @@ func idSeen(id int64) bool {
 
 func main() {
 	projectId := os.Getenv("GITLAB_PROJECT")
+	if projectId == "" {
+		log.Fatalln("Missing GITLAB_PROJECT env var")
+	}
 	token := os.Getenv("GITLAB_TOKEN")
+	if token == "" {
+		log.Fatalln("Missing GITLAB_TOKEN env var")
+	}
+
 	url := fmt.Sprintf("https://gitlab.ppro.com/api/v4/projects/%s/events?private_token=%s", projectId, token)
 
 	GREEN := "\x1b[32m"
