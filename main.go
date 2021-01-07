@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/mattn/go-isatty"
 )
 
 type Note struct {
@@ -64,6 +66,11 @@ func main() {
 	GREEN := "\x1b[32m"
 	RESET := "\x1b[0m"
 	GRAY := "\x1b[38;5;250m"
+	if !isatty.IsTerminal(os.Stdout.Fd()) {
+		GREEN = ""
+		RESET = ""
+		GRAY = ""
+	}
 
 	for {
 		resp, err := http.Get(url)
@@ -88,6 +95,7 @@ func main() {
 				continue
 			}
 			seenIds = append(seenIds, event.Id)
+
 			fmt.Printf("%s%s 🧍 %s%s%s %s%s: %s\n", GRAY, event.CreatedAt, GREEN, event.AuthorUsername, GRAY, event.Action, RESET, event.TargetTitle)
 			if event.Note != nil {
 				resolved := ""
