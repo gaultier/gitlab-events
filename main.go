@@ -25,6 +25,7 @@ type Push struct {
 
 type Event struct {
 	Id             int64
+	CreatedAt      string `json:"created_at"`
 	AuthorUsername string `json:"author_username"`
 	Action         string `json:"action_name"`
 	TargetTitle    string `json:"target_title"`
@@ -80,7 +81,7 @@ func main() {
 				continue
 			}
 			seenIds = append(seenIds, event.Id)
-			fmt.Printf("🧍 %s%s%s %s%s: %s\n", GREEN, event.AuthorUsername, GRAY, event.Action, RESET, event.TargetTitle)
+			fmt.Printf("%s%s 🧍 %s%s%s %s%s: %s\n", GRAY, event.CreatedAt, GREEN, event.AuthorUsername, GRAY, event.Action, RESET, event.TargetTitle)
 			if event.Note != nil {
 				resolved := ""
 				if event.Note.Resolved {
