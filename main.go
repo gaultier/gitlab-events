@@ -75,7 +75,8 @@ func main() {
 	for {
 		resp, err := http.Get(url)
 		if err != nil {
-			log.Fatal(err)
+			time.Sleep(1 * time.Second)
+			continue
 		}
 
 		body, err := ioutil.ReadAll(resp.Body)
