@@ -81,7 +81,8 @@ func main() {
 		body, err := ioutil.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
-			log.Fatal(err)
+			time.Sleep(1 * time.Second)
+			continue
 		}
 		var events []Event
 		if err = json.Unmarshal(body, &events); err != nil {
