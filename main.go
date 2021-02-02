@@ -98,15 +98,15 @@ func main() {
 			}
 			seenIds = append(seenIds, event.Id)
 
-			fmt.Printf("%s%s %s%s%s %s%s: %s\n", GRAY, event.CreatedAt, GREEN, event.AuthorUsername, GRAY, event.Action, RESET, event.TargetTitle)
+			fmt.Printf("%s%s %s%s%s %s%s: %s", GRAY, event.CreatedAt, GREEN, event.AuthorUsername, GRAY, event.Action, RESET, event.TargetTitle)
 			if event.Note != nil {
 				resolved := ""
 				if event.Note.Resolved {
-					resolved = "👌"
+					resolved = "✔"
 				}
-				fmt.Printf("💬 %s %s", event.Note.Body, resolved)
+				fmt.Printf("\n💬 %s %s", event.Note.Body, resolved)
 			} else if event.Push != nil {
-				fmt.Printf("⬆️  🌿 %s: %s", event.Push.Ref, event.Push.CommitTitle)
+				fmt.Printf("\n⬆️  %s: %s", event.Push.Ref, event.Push.CommitTitle)
 			}
 
 			fmt.Print("\n\n")
