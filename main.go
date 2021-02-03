@@ -104,7 +104,7 @@ func main() {
 				if event.Note.Resolved {
 					resolved = "✔"
 				}
-				fmt.Printf("\n💬 %s %s", event.Note.Body, resolved)
+				fmt.Printf("\n💬 %s %s%s%s", event.Note.Body, GREEN, resolved, RESET)
 			} else if event.Push != nil {
 				fmt.Printf("\n⬆️  %s: %s", event.Push.Ref, event.Push.CommitTitle)
 			}
