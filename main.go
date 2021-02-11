@@ -87,7 +87,9 @@ func main() {
 		}
 		var events []Event
 		if err = json.Unmarshal(body, &events); err != nil {
-			log.Fatal(err)
+			// Could happen on 504 or such which returns html instead of json
+			time.Sleep(1 * time.Second)
+			continue
 		}
 
 		for i := len(events) - 1; i >= 0; i-- {
