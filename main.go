@@ -73,8 +73,8 @@ func fetchProjectEvents(url string) ([]Event, error) {
 	return events, nil
 }
 
-func fetchProjectById(projectId int64, token string) (Project, error) {
-	url := fmt.Sprintf("https://gitlab.ppro.com/api/v4/projects/%d?simple=true&private_token=%s", projectId, token)
+func fetchProjectById(projectId int64, token string, gitlabUrl string) (Project, error) {
+	url := fmt.Sprintf("https://%s/api/v4/projects/%d?simple=true&private_token=%s", gitlabUrl, projectId, token)
 	project := Project{}
 
 	resp, err := http.Get(url)
@@ -99,10 +99,10 @@ func fetchProjectById(projectId int64, token string) (Project, error) {
 	return project, nil
 }
 
-func watchProject(project *Project, token string) {
+func watchProject(project *Project, token string, gitlabUrl string) {
 	seenIds := make(map[int64]bool)
 
-	url := fmt.Sprintf("https://gitlab.ppro.com/api/v4/projects/%d/events?private_token=%s", project.Id, token)
+	url := fmt.Sprintf("https://%s/api/v4/projects/%d/events?private_token=%s", gitlabUrl, project.Id, token)
 
 	for {
 		events, err := fetchProjectEvents(url)
@@ -139,8 +139,9 @@ func watchProject(project *Project, token string) {
 }
 
 var (
-	verbose = flag.Bool("verbose", false, "Verbose")
-	token   = flag.String("token", "", "Gitlab API token (private, do not share with others)")
+	verbose   = flag.Bool("verbose", false, "Verbose")
+	token     = flag.String("token", "", "Gitlab API token (private, do not share with others)")
+	gitlabUrl = flag.String("url", "gitlab.com", "Gitlab URL. Might be different from gitlab.com when self-hosting.")
 )
 
 func main() {
@@ -172,9 +173,9 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Invalid project id %s: %s\n", projectIdStr, err)
 			os.Exit(1)
 		}
-		project, err := fetchProjectById(projectId, *token)
+		project, err := fetchProjectById(projectId, *token, *gitlabUrl)
 
-		go watchProject(&project, *token)
+		go watchProject(&project, *token, *gitlabUrl)
 	}
 
 	// Wait indefinitely, the real work is done by the goroutines
