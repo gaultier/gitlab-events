@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/mattn/go-isatty"
@@ -34,22 +35,6 @@ type Event struct {
 	TargetTitle    string `json:"target_title"`
 	Note           *Note
 	Push           *Push `json:"push_data"`
-}
-
-var seenIds []int64
-
-func idSeen(id int64) bool {
-	if len(seenIds) == 0 {
-		return false
-	}
-
-	for _, seenId := range seenIds {
-		if seenId == id {
-			return true
-		}
-	}
-	return false
-
 }
 
 func fetchProjectEvents(url string) ([]Event, error) {
@@ -98,13 +83,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	projectId := projectIds[0]
-	if projectId == "" {
+	projectId, err := strconv.ParseInt(projectIds[0], 10, 64)
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "Emtpy project id")
 		os.Exit(1)
 	}
 
-	url := fmt.Sprintf("https://gitlab.ppro.com/api/v4/projects/%s/events?private_token=%s", projectId, *token)
+	url := fmt.Sprintf("https://gitlab.ppro.com/api/v4/projects/%d/events?private_token=%s", projectId, *token)
 
 	GREEN := "\x1b[32m"
 	RESET := "\x1b[0m"
@@ -115,6 +100,7 @@ func main() {
 		GRAY = ""
 	}
 
+	seenIdsByProjectId := make(map[int64]map[int64]bool)
 	for {
 		events, err := fetchProjectEvents(url)
 		if err != nil {
@@ -124,10 +110,14 @@ func main() {
 		for i := len(events) - 1; i >= 0; i-- {
 			event := events[i]
 
-			if idSeen(event.Id) {
+			if seenIdsByProjectId[projectId][event.Id] == true {
+				// Already seen, skip
 				continue
 			}
-			seenIds = append(seenIds, event.Id)
+			if seenIdsByProjectId[projectId] == nil {
+				seenIdsByProjectId[projectId] = make(map[int64]bool)
+			}
+			seenIdsByProjectId[projectId][event.Id] = true
 
 			fmt.Printf("%s%s %s%s%s %s%s: %s", GRAY, event.CreatedAt, GREEN, event.AuthorUsername, GRAY, event.Action, RESET, event.TargetTitle)
 			if event.Note != nil {
