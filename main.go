@@ -85,7 +85,7 @@ func main() {
 
 	projectId, err := strconv.ParseInt(projectIds[0], 10, 64)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "Emtpy project id")
+		fmt.Fprintf(os.Stderr, "Invalid project id %s: %s\n", projectIds[0], err)
 		os.Exit(1)
 	}
 
