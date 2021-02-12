@@ -15,7 +15,7 @@ import (
 )
 
 type Project struct {
-	Id                int64
+	ID                int64
 	PathWithNamespace string `json:"path_with_namespace"`
 	Name              string
 }
@@ -34,7 +34,7 @@ type Push struct {
 }
 
 type Event struct {
-	Id             int64
+	ID             int64
 	CreatedAt      string `json:"created_at"`
 	AuthorUsername string `json:"author_username"`
 	Action         string `json:"action_name"`
@@ -45,9 +45,9 @@ type Event struct {
 }
 
 var (
-	GREEN = "\x1b[32m"
-	RESET = "\x1b[0m"
-	GRAY  = "\x1b[38;5;250m"
+	_GreenColor = "\x1b[32m"
+	_ResetColor = "\x1b[0m"
+	_GrayColor  = "\x1b[38;5;250m"
 )
 
 func fetchProjectEvents(url string) ([]Event, error) {
@@ -74,8 +74,8 @@ func fetchProjectEvents(url string) ([]Event, error) {
 	return events, nil
 }
 
-func fetchProjectById(projectId int64, token string, gitlabUrl string) (Project, error) {
-	url := fmt.Sprintf("https://%s/api/v4/projects/%d?simple=true&private_token=%s", gitlabUrl, projectId, token)
+func fetchProjectByID(projectID int64, token string, gitlabURL string) (Project, error) {
+	url := fmt.Sprintf("https://%s/api/v4/projects/%d?simple=true&private_token=%s", gitlabURL, projectID, token)
 	project := Project{}
 
 	resp, err := http.Get(url)
@@ -100,46 +100,46 @@ func fetchProjectById(projectId int64, token string, gitlabUrl string) (Project,
 	return project, nil
 }
 
-func watchProject(project *Project, token string, gitlabUrl string, jsonOutput bool) {
-	seenIds := make(map[int64]bool)
+func watchProject(project *Project, token string, gitlabURL string, jsonOutput bool) {
+	seenIDs := make(map[int64]bool)
 
-	url := fmt.Sprintf("https://%s/api/v4/projects/%d/events?private_token=%s", gitlabUrl, project.Id, token)
+	url := fmt.Sprintf("https://%s/api/v4/projects/%d/events?private_token=%s", gitlabURL, project.ID, token)
 
 	for {
 		events, err := fetchProjectEvents(url)
 		if err != nil {
-			log.Printf("Error when fetching events for project %d: %s", project.Id, err)
+			log.Printf("Error when fetching events for project %d: %s", project.ID, err)
 			time.Sleep(1 * time.Second)
 		}
 
 		for i := len(events) - 1; i >= 0; i-- {
 			event := events[i]
 
-			if seenIds[event.Id] == true {
+			if seenIDs[event.ID] == true {
 				// Already seen, skip
 				continue
 			}
-			seenIds[event.Id] = true
+			seenIDs[event.ID] = true
 
 			if jsonOutput {
 				event.Project = project
-				eventJson, err := json.Marshal(event)
+				eventJSON, err := json.Marshal(event)
 				if err != nil {
 					log.Printf("Failed to marshal event to JSON: %s", err)
 				} else {
-					fmt.Println(string(eventJson))
+					fmt.Println(string(eventJSON))
 				}
 
 				continue
 			}
 
-			fmt.Printf("%s%s %s%s %s%s%s %s%s: %s", GREEN, project.PathWithNamespace, GRAY, event.CreatedAt, GREEN, event.AuthorUsername, GRAY, event.Action, RESET, event.TargetTitle)
+			fmt.Printf("%s%s %s%s %s%s%s %s%s: %s", _GreenColor, project.PathWithNamespace, _GrayColor, event.CreatedAt, _GreenColor, event.AuthorUsername, _GrayColor, event.Action, _ResetColor, event.TargetTitle)
 			if event.Note != nil {
 				resolved := ""
 				if event.Note.Resolved {
 					resolved = "✔"
 				}
-				fmt.Printf("\n💬 %s %s%s%s", event.Note.Body, GREEN, resolved, RESET)
+				fmt.Printf("\n💬 %s %s%s%s", event.Note.Body, _GreenColor, resolved, _ResetColor)
 			} else if event.Push != nil {
 				fmt.Printf("\n⬆️  %s: %s", event.Push.Ref, event.Push.CommitTitle)
 			}
@@ -154,7 +154,7 @@ func watchProject(project *Project, token string, gitlabUrl string, jsonOutput b
 var (
 	verbose    = flag.Bool("verbose", false, "Verbose")
 	token      = flag.String("token", "", "Gitlab API token (private, do not share with others)")
-	gitlabUrl  = flag.String("url", "gitlab.com", "Gitlab URL. Might be different from gitlab.com when self-hosting.")
+	gitlabURL  = flag.String("url", "gitlab.com", "Gitlab URL. Might be different from gitlab.com when self-hosting.")
 	jsonOutput = flag.Bool("json", false, "Output json for scripts to consume")
 )
 
@@ -165,27 +165,27 @@ func main() {
 		log.SetOutput(ioutil.Discard)
 	}
 
-	projectIdsStr := flag.Args()
-	if len(projectIdsStr) == 0 {
+	projectIDsStr := flag.Args()
+	if len(projectIDsStr) == 0 {
 		fmt.Fprintln(os.Stderr, "Missing project id(s) to watch")
 		os.Exit(1)
 	}
 
 	if !isatty.IsTerminal(os.Stdout.Fd()) {
-		GREEN = ""
-		RESET = ""
-		GRAY = ""
+		_GreenColor = ""
+		_ResetColor = ""
+		_GrayColor = ""
 	}
 
-	for _, projectIdStr := range projectIdsStr {
-		projectId, err := strconv.ParseInt(projectIdStr, 10, 64)
+	for _, projectIDStr := range projectIDsStr {
+		projectID, err := strconv.ParseInt(projectIDStr, 10, 64)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Invalid project id %s: %s\n", projectIdStr, err)
+			fmt.Fprintf(os.Stderr, "Invalid project id %s: %s\n", projectIDStr, err)
 			os.Exit(1)
 		}
-		project, err := fetchProjectById(projectId, *token, *gitlabUrl)
+		project, err := fetchProjectByID(projectID, *token, *gitlabURL)
 
-		go watchProject(&project, *token, *gitlabUrl, *jsonOutput)
+		go watchProject(&project, *token, *gitlabURL, *jsonOutput)
 	}
 
 	// Wait indefinitely, the real work is done by the goroutines
