@@ -2,6 +2,8 @@
 
 Toy cli to continuously watch gitlab events for multiple projects, because Gitlab notifications suck.
 
+![Demo](demo.png "Demo")
+
 ```
 go build
 
