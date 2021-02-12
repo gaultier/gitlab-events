@@ -1,6 +1,6 @@
 # Gitlab events
 
-Toy cli to continuously watch gitlab events for multiple projects, because Gitlab notifications suck.
+Simple CLI to watch the activity of multiple Gitlab projects. Because Gitlab notifications suck.
 
 ![Demo](demo.png "Demo")
 
