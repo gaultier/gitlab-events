@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -51,17 +52,59 @@ func idSeen(id int64) bool {
 
 }
 
-func main() {
-	projectId := os.Getenv("GITLAB_PROJECT")
-	if projectId == "" {
-		log.Fatalln("Missing GITLAB_PROJECT env var")
-	}
-	token := os.Getenv("GITLAB_TOKEN")
-	if token == "" {
-		log.Fatalln("Missing GITLAB_TOKEN env var")
+func fetchProjectEvents(url string) ([]Event, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
 	}
 
-	url := fmt.Sprintf("https://gitlab.ppro.com/api/v4/projects/%s/events?private_token=%s", projectId, token)
+	body, err := ioutil.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("Body: %s\n", body)
+
+	var events []Event
+	if err = json.Unmarshal(body, &events); err != nil {
+		// Could happen on 504 or such which returns html instead of json
+		return nil, err
+	}
+
+	log.Printf("JSON events: %+v\n", events)
+
+	return events, nil
+}
+
+var (
+	verbose = flag.Bool("verbose", false, "Verbose")
+	token   = flag.String("token", "", "Gitlab API token (private, do not share with others)")
+)
+
+func main() {
+	flag.Parse()
+
+	if !*verbose {
+		log.SetOutput(ioutil.Discard)
+	}
+	if *token == "" {
+		fmt.Fprintln(os.Stderr, "Missing token")
+		os.Exit(1)
+	}
+
+	projectIds := flag.Args()
+	if len(projectIds) == 0 {
+		fmt.Fprintln(os.Stderr, "Missing project id(s) to watch")
+		os.Exit(1)
+	}
+
+	projectId := projectIds[0]
+	if projectId == "" {
+		fmt.Fprintln(os.Stderr, "Emtpy project id")
+		os.Exit(1)
+	}
+
+	url := fmt.Sprintf("https://gitlab.ppro.com/api/v4/projects/%s/events?private_token=%s", projectId, *token)
 
 	GREEN := "\x1b[32m"
 	RESET := "\x1b[0m"
@@ -73,23 +116,9 @@ func main() {
 	}
 
 	for {
-		resp, err := http.Get(url)
+		events, err := fetchProjectEvents(url)
 		if err != nil {
 			time.Sleep(1 * time.Second)
-			continue
-		}
-
-		body, err := ioutil.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			time.Sleep(1 * time.Second)
-			continue
-		}
-		var events []Event
-		if err = json.Unmarshal(body, &events); err != nil {
-			// Could happen on 504 or such which returns html instead of json
-			time.Sleep(1 * time.Second)
-			continue
 		}
 
 		for i := len(events) - 1; i >= 0; i-- {
