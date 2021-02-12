@@ -14,6 +14,12 @@ import (
 	"github.com/mattn/go-isatty"
 )
 
+type Project struct {
+	Id                int64
+	PathWithNamespace string `json:"path_with_namespace"`
+	Name              string
+}
+
 type Note struct {
 	Type     string
 	Body     string
@@ -67,13 +73,41 @@ func fetchProjectEvents(url string) ([]Event, error) {
 	return events, nil
 }
 
-func watchProject(projectId int64, url string) {
+func fetchProjectById(projectId int64, token string) (Project, error) {
+	url := fmt.Sprintf("https://gitlab.ppro.com/api/v4/projects/%d?simple=true&private_token=%s", projectId, token)
+	project := Project{}
+
+	resp, err := http.Get(url)
+	if err != nil {
+		return project, err
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return project, err
+	}
+	log.Printf("Body: %s\n", body)
+
+	if err = json.Unmarshal(body, &project); err != nil {
+		// Could happen on 504 or such which returns html instead of json
+		return project, err
+	}
+
+	log.Printf("JSON project: %+v\n", project)
+
+	return project, nil
+}
+
+func watchProject(project *Project, token string) {
 	seenIds := make(map[int64]bool)
+
+	url := fmt.Sprintf("https://gitlab.ppro.com/api/v4/projects/%d/events?private_token=%s", project.Id, token)
 
 	for {
 		events, err := fetchProjectEvents(url)
 		if err != nil {
-			log.Printf("Error when fetching events for project %d: %s", projectId, err)
+			log.Printf("Error when fetching events for project %d: %s", project.Id, err)
 			time.Sleep(1 * time.Second)
 		}
 
@@ -86,7 +120,7 @@ func watchProject(projectId int64, url string) {
 			}
 			seenIds[event.Id] = true
 
-			fmt.Printf("%s%s %s%s%s %s%s: %s", GRAY, event.CreatedAt, GREEN, event.AuthorUsername, GRAY, event.Action, RESET, event.TargetTitle)
+			fmt.Printf("%s%s %s%s %s%s%s %s%s: %s", GREEN, project.PathWithNamespace, GRAY, event.CreatedAt, GREEN, event.AuthorUsername, GRAY, event.Action, RESET, event.TargetTitle)
 			if event.Note != nil {
 				resolved := ""
 				if event.Note.Resolved {
@@ -138,9 +172,9 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Invalid project id %s: %s\n", projectIdStr, err)
 			os.Exit(1)
 		}
+		project, err := fetchProjectById(projectId, *token)
 
-		url := fmt.Sprintf("https://gitlab.ppro.com/api/v4/projects/%d/events?private_token=%s", projectId, *token)
-		go watchProject(projectId, url)
+		go watchProject(&project, *token)
 	}
 
 	// Wait indefinitely, the real work is done by the goroutines
