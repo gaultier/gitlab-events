@@ -37,6 +37,12 @@ type Event struct {
 	Push           *Push `json:"push_data"`
 }
 
+var (
+	GREEN = "\x1b[32m"
+	RESET = "\x1b[0m"
+	GRAY  = "\x1b[38;5;250m"
+)
+
 func fetchProjectEvents(url string) ([]Event, error) {
 	resp, err := http.Get(url)
 	if err != nil {
@@ -61,46 +67,9 @@ func fetchProjectEvents(url string) ([]Event, error) {
 	return events, nil
 }
 
-var (
-	verbose = flag.Bool("verbose", false, "Verbose")
-	token   = flag.String("token", "", "Gitlab API token (private, do not share with others)")
-)
+func watchProject(projectId int64, url string) {
+	seenIds := make(map[int64]bool)
 
-func main() {
-	flag.Parse()
-
-	if !*verbose {
-		log.SetOutput(ioutil.Discard)
-	}
-	if *token == "" {
-		fmt.Fprintln(os.Stderr, "Missing token")
-		os.Exit(1)
-	}
-
-	projectIds := flag.Args()
-	if len(projectIds) == 0 {
-		fmt.Fprintln(os.Stderr, "Missing project id(s) to watch")
-		os.Exit(1)
-	}
-
-	projectId, err := strconv.ParseInt(projectIds[0], 10, 64)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Invalid project id %s: %s\n", projectIds[0], err)
-		os.Exit(1)
-	}
-
-	url := fmt.Sprintf("https://gitlab.ppro.com/api/v4/projects/%d/events?private_token=%s", projectId, *token)
-
-	GREEN := "\x1b[32m"
-	RESET := "\x1b[0m"
-	GRAY := "\x1b[38;5;250m"
-	if !isatty.IsTerminal(os.Stdout.Fd()) {
-		GREEN = ""
-		RESET = ""
-		GRAY = ""
-	}
-
-	seenIdsByProjectId := make(map[int64]map[int64]bool)
 	for {
 		events, err := fetchProjectEvents(url)
 		if err != nil {
@@ -111,14 +80,11 @@ func main() {
 		for i := len(events) - 1; i >= 0; i-- {
 			event := events[i]
 
-			if seenIdsByProjectId[projectId][event.Id] == true {
+			if seenIds[event.Id] == true {
 				// Already seen, skip
 				continue
 			}
-			if seenIdsByProjectId[projectId] == nil {
-				seenIdsByProjectId[projectId] = make(map[int64]bool)
-			}
-			seenIdsByProjectId[projectId][event.Id] = true
+			seenIds[event.Id] = true
 
 			fmt.Printf("%s%s %s%s%s %s%s: %s", GRAY, event.CreatedAt, GREEN, event.AuthorUsername, GRAY, event.Action, RESET, event.TargetTitle)
 			if event.Note != nil {
@@ -136,4 +102,48 @@ func main() {
 
 		time.Sleep(5 * time.Second)
 	}
+}
+
+var (
+	verbose = flag.Bool("verbose", false, "Verbose")
+	token   = flag.String("token", "", "Gitlab API token (private, do not share with others)")
+)
+
+func main() {
+	flag.Parse()
+
+	if !*verbose {
+		log.SetOutput(ioutil.Discard)
+	}
+	if *token == "" {
+		fmt.Fprintln(os.Stderr, "Missing token")
+		os.Exit(1)
+	}
+
+	projectIdsStr := flag.Args()
+	if len(projectIdsStr) == 0 {
+		fmt.Fprintln(os.Stderr, "Missing project id(s) to watch")
+		os.Exit(1)
+	}
+
+	if !isatty.IsTerminal(os.Stdout.Fd()) {
+		GREEN = ""
+		RESET = ""
+		GRAY = ""
+	}
+
+	for _, projectIdStr := range projectIdsStr {
+		projectId, err := strconv.ParseInt(projectIdStr, 10, 64)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Invalid project id %s: %s\n", projectIdStr, err)
+			os.Exit(1)
+		}
+
+		url := fmt.Sprintf("https://gitlab.ppro.com/api/v4/projects/%d/events?private_token=%s", projectId, *token)
+		go watchProject(projectId, url)
+	}
+
+	// Wait indefinitely, the real work is done by the goroutines
+	done := make(chan bool)
+	<-done
 }
