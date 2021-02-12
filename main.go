@@ -41,6 +41,7 @@ type Event struct {
 	TargetTitle    string `json:"target_title"`
 	Note           *Note
 	Push           *Push `json:"push_data"`
+	Project        *Project
 }
 
 var (
@@ -99,7 +100,7 @@ func fetchProjectById(projectId int64, token string, gitlabUrl string) (Project,
 	return project, nil
 }
 
-func watchProject(project *Project, token string, gitlabUrl string) {
+func watchProject(project *Project, token string, gitlabUrl string, jsonOutput bool) {
 	seenIds := make(map[int64]bool)
 
 	url := fmt.Sprintf("https://%s/api/v4/projects/%d/events?private_token=%s", gitlabUrl, project.Id, token)
@@ -120,6 +121,18 @@ func watchProject(project *Project, token string, gitlabUrl string) {
 			}
 			seenIds[event.Id] = true
 
+			if jsonOutput {
+				event.Project = project
+				eventJson, err := json.Marshal(event)
+				if err != nil {
+					log.Printf("Failed to marshal event to JSON: %s", err)
+				} else {
+					fmt.Println(string(eventJson))
+				}
+
+				continue
+			}
+
 			fmt.Printf("%s%s %s%s %s%s%s %s%s: %s", GREEN, project.PathWithNamespace, GRAY, event.CreatedAt, GREEN, event.AuthorUsername, GRAY, event.Action, RESET, event.TargetTitle)
 			if event.Note != nil {
 				resolved := ""
@@ -139,9 +152,10 @@ func watchProject(project *Project, token string, gitlabUrl string) {
 }
 
 var (
-	verbose   = flag.Bool("verbose", false, "Verbose")
-	token     = flag.String("token", "", "Gitlab API token (private, do not share with others)")
-	gitlabUrl = flag.String("url", "gitlab.com", "Gitlab URL. Might be different from gitlab.com when self-hosting.")
+	verbose    = flag.Bool("verbose", false, "Verbose")
+	token      = flag.String("token", "", "Gitlab API token (private, do not share with others)")
+	gitlabUrl  = flag.String("url", "gitlab.com", "Gitlab URL. Might be different from gitlab.com when self-hosting.")
+	jsonOutput = flag.Bool("json", false, "Output json for scripts to consume")
 )
 
 func main() {
@@ -171,7 +185,7 @@ func main() {
 		}
 		project, err := fetchProjectById(projectId, *token, *gitlabUrl)
 
-		go watchProject(&project, *token, *gitlabUrl)
+		go watchProject(&project, *token, *gitlabUrl, *jsonOutput)
 	}
 
 	// Wait indefinitely, the real work is done by the goroutines

@@ -12,6 +12,9 @@ go build
 
 // Watch projects with id 11, 15, and 100 with a custom url and a token
 ./gitlab-events -url mycompany.gitlab.com -token="$GITLAB_TOKEN" 11 15 100
+
+// Watch projects with id 11, 15, and 100 and output json objects (one on each line) for scripts to consume
+./gitlab-events -json 11 15 100
 ```
 
 
