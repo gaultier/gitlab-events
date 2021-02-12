@@ -14,6 +14,13 @@ import (
 	"github.com/mattn/go-isatty"
 )
 
+var (
+	verbose    = flag.Bool("verbose", false, "Verbose")
+	token      = flag.String("token", "", "Gitlab API token (private, do not share with others)")
+	gitlabURL  = flag.String("url", "gitlab.com", "Gitlab URL. Might be different from gitlab.com when self-hosting.")
+	jsonOutput = flag.Bool("json", false, "Output json for scripts to consume")
+)
+
 type Project struct {
 	ID                int64
 	PathWithNamespace string `json:"path_with_namespace"`
@@ -74,8 +81,8 @@ func fetchProjectEvents(url string) ([]Event, error) {
 	return events, nil
 }
 
-func fetchProjectByID(projectID int64, token string, gitlabURL string) (Project, error) {
-	url := fmt.Sprintf("https://%s/api/v4/projects/%d?simple=true&private_token=%s", gitlabURL, projectID, token)
+func fetchProjectByID(projectID int64) (Project, error) {
+	url := fmt.Sprintf("https://%s/api/v4/projects/%d?simple=true&private_token=%s", *gitlabURL, projectID, *token)
 	project := Project{}
 
 	resp, err := http.Get(url)
@@ -100,10 +107,10 @@ func fetchProjectByID(projectID int64, token string, gitlabURL string) (Project,
 	return project, nil
 }
 
-func watchProject(project *Project, token string, gitlabURL string, jsonOutput bool) {
+func watchProject(project *Project) {
 	seenIDs := make(map[int64]bool)
 
-	url := fmt.Sprintf("https://%s/api/v4/projects/%d/events?private_token=%s", gitlabURL, project.ID, token)
+	url := fmt.Sprintf("https://%s/api/v4/projects/%d/events?private_token=%s", *gitlabURL, project.ID, *token)
 
 	for {
 		events, err := fetchProjectEvents(url)
@@ -121,7 +128,7 @@ func watchProject(project *Project, token string, gitlabURL string, jsonOutput b
 			}
 			seenIDs[event.ID] = true
 
-			if jsonOutput {
+			if *jsonOutput {
 				event.Project = project
 				eventJSON, err := json.Marshal(event)
 				if err != nil {
@@ -151,13 +158,6 @@ func watchProject(project *Project, token string, gitlabURL string, jsonOutput b
 	}
 }
 
-var (
-	verbose    = flag.Bool("verbose", false, "Verbose")
-	token      = flag.String("token", "", "Gitlab API token (private, do not share with others)")
-	gitlabURL  = flag.String("url", "gitlab.com", "Gitlab URL. Might be different from gitlab.com when self-hosting.")
-	jsonOutput = flag.Bool("json", false, "Output json for scripts to consume")
-)
-
 func main() {
 	flag.Parse()
 
@@ -183,9 +183,9 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Invalid project id %s: %s\n", projectIDStr, err)
 			os.Exit(1)
 		}
-		project, err := fetchProjectByID(projectID, *token, *gitlabURL)
+		project, err := fetchProjectByID(projectID)
 
-		go watchProject(&project, *token, *gitlabURL, *jsonOutput)
+		go watchProject(&project)
 	}
 
 	// Wait indefinitely, the real work is done by the goroutines
