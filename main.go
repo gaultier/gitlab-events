@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"strconv"
@@ -146,7 +147,8 @@ func watchProject(project *Project) {
 				if event.Note.Resolved {
 					resolved = "✔"
 				}
-				fmt.Printf("\n💬 %s %s%s%s", event.Note.Body, _GreenColor, resolved, _ResetColor)
+				noteLen := int64(math.Min(float64(len(event.Note.Body)), 300))
+				fmt.Printf("\n💬 %s %s%s%s", event.Note.Body[:noteLen], _GreenColor, resolved, _ResetColor)
 			} else if event.Push != nil {
 				fmt.Printf("\n⬆️  %s: %s", event.Push.Ref, event.Push.CommitTitle)
 			}
