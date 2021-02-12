@@ -104,6 +104,7 @@ func main() {
 	for {
 		events, err := fetchProjectEvents(url)
 		if err != nil {
+			log.Printf("Error when fetching events for project %d: %s", projectId, err)
 			time.Sleep(1 * time.Second)
 		}
 
