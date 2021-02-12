@@ -150,10 +150,6 @@ func main() {
 	if !*verbose {
 		log.SetOutput(ioutil.Discard)
 	}
-	if *token == "" {
-		fmt.Fprintln(os.Stderr, "Missing token")
-		os.Exit(1)
-	}
 
 	projectIdsStr := flag.Args()
 	if len(projectIdsStr) == 0 {
