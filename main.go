@@ -141,19 +141,19 @@ func watchProject(project *Project) {
 				continue
 			}
 
-			fmt.Printf("%s%s %s%s %s%s%s %s%s: %s", _GreenColor, project.PathWithNamespace, _GrayColor, event.CreatedAt, _GreenColor, event.AuthorUsername, _GrayColor, event.Action, _ResetColor, event.TargetTitle)
+			output := fmt.Sprintf("%s%s %s%s %s%s%s %s%s: %s", _GreenColor, project.PathWithNamespace, _GrayColor, event.CreatedAt, _GreenColor, event.AuthorUsername, _GrayColor, event.Action, _ResetColor, event.TargetTitle)
 			if event.Note != nil {
 				resolved := ""
 				if event.Note.Resolved {
 					resolved = "✔"
 				}
 				noteLen := int64(math.Min(float64(len(event.Note.Body)), 300))
-				fmt.Printf("\n💬 %s %s%s%s", event.Note.Body[:noteLen], _GreenColor, resolved, _ResetColor)
+				output += fmt.Sprintf("\n💬 %s %s%s%s", event.Note.Body[:noteLen], _GreenColor, resolved, _ResetColor)
 			} else if event.Push != nil {
-				fmt.Printf("\n⬆️  %s: %s", event.Push.Ref, event.Push.CommitTitle)
+				output += fmt.Sprintf("\n⬆️  %s: %s", event.Push.Ref, event.Push.CommitTitle)
 			}
 
-			fmt.Print("\n\n")
+			fmt.Printf("%s\n\n", output)
 		}
 
 		time.Sleep(5 * time.Second)
