@@ -69,15 +69,12 @@ func fetchProjectEvents(url string) ([]Event, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("Body: %s\n", body)
 
 	var events []Event
 	if err = json.Unmarshal(body, &events); err != nil {
 		// Could happen on 504 or such which returns html instead of json
 		return nil, err
 	}
-
-	log.Printf("JSON events: %+v\n", events)
 
 	return events, nil
 }
@@ -96,14 +93,11 @@ func fetchProjectByID(projectID int64) (Project, error) {
 	if err != nil {
 		return project, err
 	}
-	log.Printf("Body: %s\n", body)
 
 	if err = json.Unmarshal(body, &project); err != nil {
 		// Could happen on 504 or such which returns html instead of json
 		return project, err
 	}
-
-	log.Printf("JSON project: %+v\n", project)
 
 	return project, nil
 }
@@ -180,14 +174,23 @@ func main() {
 	}
 
 	for _, projectIDStr := range projectIDsStr {
+		log.Printf("Handling projectID=%s", projectIDStr)
 		projectID, err := strconv.ParseInt(projectIDStr, 10, 64)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Invalid project id %s: %s\n", projectIDStr, err)
 			os.Exit(1)
 		}
-		project, err := fetchProjectByID(projectID)
 
-		go watchProject(&project)
+		go func() {
+			project, err := fetchProjectByID(projectID)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to fetch the project information: id=%d err=%s\n", projectID, err)
+				os.Exit(1)
+			}
+			log.Printf("Fetchted info for projectID=%d", projectID)
+
+			watchProject(&project)
+		}()
 	}
 
 	// Wait indefinitely, the real work is done by the goroutines
