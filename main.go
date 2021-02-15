@@ -22,11 +22,17 @@ var (
 	jsonOutput = flag.Bool("json", false, "Output json for scripts to consume")
 )
 
+var (
+	_GreenColor = "\x1b[32m"
+	_ResetColor = "\x1b[0m"
+	_GrayColor  = "\x1b[38;5;250m"
+)
+
 const (
 	eventTemplate = `
-{{.Green}}{{.ProjectPathWithNamespace}}{{.Gray}} {{.CreatedAt}}{{.Green}} {{.Author}}{{.Gray}}: {{.EventAction}}{{.Reset}} {{.TargetTitle}}
+{{.Green}}{{.ProjectPathWithNamespace}}{{.Gray}} {{.CreatedAt}}{{.Green}} {{.Author}}{{.Gray}}: {{.EventAction}}{{.Reset}} {{trunc .TargetTitle 100}}
 {{- if .IsNote }}
-💬 {{ .Body -}}
+💬 {{trunc .Body 300 -}}
 {{- if .Resolved -}} {{.Green}} ✔{{.Reset -}}{{- end}}
 {{- end -}}
 {{- if .IsPush }}
@@ -34,6 +40,15 @@ const (
 {{- end}}
 `
 )
+
+func truncateString(s string, maxLen int) string {
+	length := len(s)
+	if length <= maxLen {
+		return s
+	} else {
+		return fmt.Sprintf("%s%s...%s", s[:maxLen], _GrayColor, _ResetColor)
+	}
+}
 
 type TemplateInput struct {
 	Green, ProjectPathWithNamespace, Gray, CreatedAt, Author, EventAction, Reset, TargetTitle, Body, Ref, CommitTitle string
@@ -69,12 +84,6 @@ type Event struct {
 	Push           *Push `json:"push_data"`
 	Project        *Project
 }
-
-var (
-	_GreenColor = "\x1b[32m"
-	_ResetColor = "\x1b[0m"
-	_GrayColor  = "\x1b[38;5;250m"
-)
 
 func fetchProjectEvents(url string) ([]Event, error) {
 	resp, err := http.Get(url)
@@ -123,7 +132,7 @@ func fetchProjectByID(projectID int64) (Project, error) {
 func watchProject(project *Project) {
 	seenIDs := make(map[int64]bool)
 
-	t := template.Must(template.New("event").Parse(eventTemplate))
+	t := template.Must(template.New("event").Funcs(template.FuncMap{"trunc": truncateString}).Parse(eventTemplate))
 
 	url := fmt.Sprintf("https://%s/api/v4/projects/%d/events?private_token=%s", *gitlabURL, project.ID, *token)
 
