@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"math"
 	"net/http"
 	"os"
 	"strconv"
+	"text/template"
 	"time"
 
 	"github.com/mattn/go-isatty"
@@ -21,6 +21,24 @@ var (
 	gitlabURL  = flag.String("url", "gitlab.com", "Gitlab URL. Might be different from gitlab.com when self-hosting.")
 	jsonOutput = flag.Bool("json", false, "Output json for scripts to consume")
 )
+
+const (
+	eventTemplate = `
+{{.Green}}{{.ProjectPathWithNamespace}}{{.Gray}} {{.CreatedAt}}{{.Green}} {{.Author}}{{.Gray}}: {{.EventAction}}{{.Reset}} {{.TargetTitle}}
+{{- if .IsNote }}
+💬 {{ .Body -}}
+{{- if .Resolved -}} {{.Green}} ✔{{.Reset -}}{{- end}}
+{{- end -}}
+{{- if .IsPush }}
+⬆️  {{.Ref}} {{.CommitTitle -}}
+{{- end}}
+`
+)
+
+type TemplateInput struct {
+	Green, ProjectPathWithNamespace, Gray, CreatedAt, Author, EventAction, Reset, TargetTitle, Body, Ref, CommitTitle string
+	IsNote, IsPush, Resolved                                                                                          bool
+}
 
 type Project struct {
 	ID                int64
@@ -105,6 +123,8 @@ func fetchProjectByID(projectID int64) (Project, error) {
 func watchProject(project *Project) {
 	seenIDs := make(map[int64]bool)
 
+	t := template.Must(template.New("event").Parse(eventTemplate))
+
 	url := fmt.Sprintf("https://%s/api/v4/projects/%d/events?private_token=%s", *gitlabURL, project.ID, *token)
 
 	for {
@@ -135,19 +155,18 @@ func watchProject(project *Project) {
 				continue
 			}
 
-			output := fmt.Sprintf("%s%s %s%s %s%s%s %s%s: %s", _GreenColor, project.PathWithNamespace, _GrayColor, event.CreatedAt, _GreenColor, event.AuthorUsername, _GrayColor, event.Action, _ResetColor, event.TargetTitle)
+			templateInput := TemplateInput{Green: _GreenColor, Gray: _GrayColor, Reset: _ResetColor, CreatedAt: event.CreatedAt, Author: event.AuthorUsername, TargetTitle: event.TargetTitle, ProjectPathWithNamespace: project.PathWithNamespace, EventAction: event.Action}
 			if event.Note != nil {
-				resolved := ""
-				if event.Note.Resolved {
-					resolved = "✔"
-				}
-				noteLen := int64(math.Min(float64(len(event.Note.Body)), 300))
-				output += fmt.Sprintf("\n💬 %s %s%s%s", event.Note.Body[:noteLen], _GreenColor, resolved, _ResetColor)
+				templateInput.IsNote = true
+				templateInput.Resolved = event.Note.Resolved
+				templateInput.Body = event.Note.Body
 			} else if event.Push != nil {
-				output += fmt.Sprintf("\n⬆️  %s: %s", event.Push.Ref, event.Push.CommitTitle)
+				templateInput.IsPush = true
+				templateInput.Ref = event.Push.Ref
+				templateInput.CommitTitle = event.Push.CommitTitle
 			}
 
-			fmt.Printf("%s\n\n", output)
+			t.Execute(os.Stdout, &templateInput)
 		}
 
 		time.Sleep(5 * time.Second)
