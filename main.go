@@ -32,7 +32,7 @@ const (
 	eventTemplate = `
 {{.Green}}{{.ProjectPathWithNamespace}}{{.Gray}} {{.CreatedAt}}{{.Green}} {{.Author}}{{.Gray}}: {{.EventAction}}{{.Reset}} {{trunc .TargetTitle 100}}
 {{- if .IsNote }}
-💬 {{trunc .Body 300 -}}
+💬 {{trunc .Body 400 -}}
 {{- if .Resolved -}} {{.Green}} ✔{{.Reset -}}{{- end}}
 {{- end -}}
 {{- if .IsPush }}
