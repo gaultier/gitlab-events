@@ -96,7 +96,6 @@ type Event struct {
 	Push           *Push `json:"push_data"`
 	Project        *Project
 	JSON           []byte
-	URL            string
 }
 
 func addEvents(events *[]Event) {
@@ -120,7 +119,7 @@ func addEvents(events *[]Event) {
 	}
 }
 
-func fetchProjectEvents(baseUrl string, url string, project *Project) error {
+func fetchProjectEvents(url string, project *Project) error {
 	resp, err := http.Get(url)
 	if err != nil {
 		return err
@@ -143,13 +142,6 @@ func fetchProjectEvents(baseUrl string, url string, project *Project) error {
 	for i := range events {
 		events[i].JSON, _ = json.Marshal(&events[i])
 		events[i].Project = project
-		if events[i].Note != nil {
-			events[i].URL = fmt.Sprintf("🔗 https://%s/%s/-/merge_requests/%d", baseUrl, project.PathWithNamespace, events[i].Note.NoteableIID)
-		} else if events[i].TargetType == "MergeRequest" {
-			events[i].URL = fmt.Sprintf("🔗 https://%s/%s/-/merge_requests/%d", baseUrl, project.PathWithNamespace, events[i].TargetIID)
-		} else {
-			events[i].URL = fmt.Sprintf("🔗 https://%s/%s", baseUrl, project.PathWithNamespace)
-		}
 	}
 	addEvents(&events)
 
@@ -183,7 +175,7 @@ func watchProject(project *Project) {
 	url := fmt.Sprintf("https://%s/api/v4/projects/%d/events?private_token=%s", *gitlabURL, project.ID, *token)
 
 	for {
-		if err := fetchProjectEvents(*gitlabURL, url, project); err != nil {
+		if err := fetchProjectEvents(url, project); err != nil {
 			log.Printf("Error when fetching events for project %d: %s", project.ID, err)
 			time.Sleep(1 * time.Second)
 		}
@@ -279,6 +271,13 @@ func main() {
 			if err != nil {
 				log.Printf("Failed to parse date: CreatedAt=%s err=%s", event.CreatedAt, err)
 			}
+
+			url := fmt.Sprintf("🔗 https://%s/%s", *gitlabURL, event.Project.PathWithNamespace)
+			if event.Note != nil {
+				url += fmt.Sprintf("/-/merge_requests/%d", event.Note.NoteableIID)
+			} else if event.TargetType == "MergeRequest" {
+				url = fmt.Sprintf("/-/merge_requests/%d", event.TargetIID)
+			}
 			templateInput := TemplateInput{
 				Green:                    _GreenColor,
 				Gray:                     _GrayColor,
@@ -287,7 +286,7 @@ func main() {
 				Author:                   event.AuthorUsername,
 				TargetTitle:              event.TargetTitle,
 				ProjectPathWithNamespace: event.Project.PathWithNamespace,
-				URL:                      event.URL,
+				URL:                      url,
 				TimeSince:                formatTimeSinceShort(time.Since(createdAt)),
 				EventAction:              event.Action}
 			if event.Note != nil {
