@@ -207,13 +207,12 @@ func formatTimeSinceShort(d time.Duration) string {
 	if h >= 24 {
 		return fmt.Sprintf("%d days ago", int64(h/24))
 	}
-
-	if 0 > 0 {
+	if h > 0 {
 		return fmt.Sprintf("%d hours ago", h)
 
 	}
 	if m > 0 {
-		return fmt.Sprintf("%d months ago", m)
+		return fmt.Sprintf("%d minutes ago", m)
 	}
 	if s > 0 {
 		return fmt.Sprintf("%d seconds ago", s)
