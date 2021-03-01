@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"crypto/sha1"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -8,7 +10,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
+	"sync"
 	"text/template"
 	"time"
 
@@ -23,9 +27,13 @@ var (
 )
 
 var (
-	_GreenColor = "\x1b[32m"
-	_ResetColor = "\x1b[0m"
-	_GrayColor  = "\x1b[38;5;250m"
+	_GreenColor                  = "\x1b[32m"
+	_ResetColor                  = "\x1b[0m"
+	_GrayColor                   = "\x1b[38;5;250m"
+	_NewOrModifiedEvents []Event = nil
+	_EventChecksumsByID          = make(map[int64][]byte)
+	_EventsMutex                 = &sync.Mutex{}
+	_Hasher                      = sha1.New()
 )
 
 const (
@@ -83,27 +91,58 @@ type Event struct {
 	Note           *Note
 	Push           *Push `json:"push_data"`
 	Project        *Project
+	JSON           []byte
 }
 
-func fetchProjectEvents(url string) ([]Event, error) {
+func addEvents(events *[]Event) {
+	_EventsMutex.Lock()
+	defer _EventsMutex.Unlock()
+
+	log.Printf("New events: len=%d", len(*events))
+	for _, event := range *events {
+		hash := _Hasher.Sum(event.JSON)
+
+		existingHash, found := _EventChecksumsByID[event.ID]
+		if !found {
+			_NewOrModifiedEvents = append(_NewOrModifiedEvents, event)
+			_EventChecksumsByID[event.ID] = hash
+			log.Printf("New event: projectID=%d id=%d", event.Project.ID, event.ID)
+			continue
+		}
+
+		if !bytes.Equal(hash, existingHash) { // Updated
+			_NewOrModifiedEvents = append(_NewOrModifiedEvents, event)
+			_EventChecksumsByID[event.ID] = hash
+			log.Printf("Updated event: projectID=%d id=%d", event.Project.ID, event.ID)
+		}
+	}
+}
+
+func fetchProjectEvents(url string, project *Project) error {
 	resp, err := http.Get(url)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	var events []Event
 	if err = json.Unmarshal(body, &events); err != nil {
 		// Could happen on 504 or such which returns html instead of json
-		return nil, err
+		return err
 	}
 
-	return events, nil
+	for i := range events {
+		events[i].JSON, _ = json.Marshal(&events[i])
+		events[i].Project = project
+	}
+	addEvents(&events)
+
+	return nil
 }
 
 func fetchProjectByID(projectID int64) (Project, error) {
@@ -130,52 +169,12 @@ func fetchProjectByID(projectID int64) (Project, error) {
 }
 
 func watchProject(project *Project) {
-	seenIDs := make(map[int64]bool)
-
-	t := template.Must(template.New("event").Funcs(template.FuncMap{"trunc": truncateString}).Parse(eventTemplate))
-
 	url := fmt.Sprintf("https://%s/api/v4/projects/%d/events?private_token=%s", *gitlabURL, project.ID, *token)
 
 	for {
-		events, err := fetchProjectEvents(url)
-		if err != nil {
+		if err := fetchProjectEvents(url, project); err != nil {
 			log.Printf("Error when fetching events for project %d: %s", project.ID, err)
 			time.Sleep(1 * time.Second)
-		}
-
-		for i := len(events) - 1; i >= 0; i-- {
-			event := events[i]
-
-			if seenIDs[event.ID] == true {
-				// Already seen, skip
-				continue
-			}
-			seenIDs[event.ID] = true
-
-			if *jsonOutput {
-				event.Project = project
-				eventJSON, err := json.Marshal(event)
-				if err != nil {
-					log.Printf("Failed to marshal event to JSON: %s", err)
-				} else {
-					fmt.Println(string(eventJSON))
-				}
-
-				continue
-			}
-
-			templateInput := TemplateInput{Green: _GreenColor, Gray: _GrayColor, Reset: _ResetColor, CreatedAt: event.CreatedAt, Author: event.AuthorUsername, TargetTitle: event.TargetTitle, ProjectPathWithNamespace: project.PathWithNamespace, EventAction: event.Action}
-			if event.Note != nil {
-				templateInput.IsNote = true
-				templateInput.Resolved = event.Note.Resolved
-				templateInput.Body = event.Note.Body
-			} else if event.Push != nil {
-				templateInput.IsPush = true
-				templateInput.Ref = event.Push.Ref
-				templateInput.CommitTitle = event.Push.CommitTitle
-			}
-
-			t.Execute(os.Stdout, &templateInput)
 		}
 
 		time.Sleep(5 * time.Second)
@@ -215,13 +214,51 @@ func main() {
 				fmt.Fprintf(os.Stderr, "Failed to fetch the project information: id=%d err=%s\n", projectID, err)
 				os.Exit(1)
 			}
-			log.Printf("Fetchted info for projectID=%d", projectID)
+			log.Printf("Fetched info for projectID=%d", projectID)
 
 			watchProject(&project)
 		}()
 	}
 
-	// Wait indefinitely, the real work is done by the goroutines
-	done := make(chan bool)
-	<-done
+	t := template.Must(template.New("event").Funcs(template.FuncMap{"trunc": truncateString}).Parse(eventTemplate))
+
+	for {
+		_EventsMutex.Lock()
+		events := make([]Event, len(_NewOrModifiedEvents))
+		copied := copy(events, _NewOrModifiedEvents)
+		log.Printf("Display: copied=%d len=%d %d", copied, len(events), len(_NewOrModifiedEvents))
+		_NewOrModifiedEvents = nil
+		_EventsMutex.Unlock()
+		sort.Slice(events, func(i, j int) bool { return events[i].CreatedAt < events[j].CreatedAt })
+
+		for _, event := range events {
+			if *jsonOutput {
+				fmt.Println(string(event.JSON))
+
+				continue
+			}
+
+			templateInput := TemplateInput{
+				Green:                    _GreenColor,
+				Gray:                     _GrayColor,
+				Reset:                    _ResetColor,
+				CreatedAt:                event.CreatedAt,
+				Author:                   event.AuthorUsername,
+				TargetTitle:              event.TargetTitle,
+				ProjectPathWithNamespace: event.Project.PathWithNamespace,
+				EventAction:              event.Action}
+			if event.Note != nil {
+				templateInput.IsNote = true
+				templateInput.Resolved = event.Note.Resolved
+				templateInput.Body = event.Note.Body
+			} else if event.Push != nil {
+				templateInput.IsPush = true
+				templateInput.Ref = event.Push.Ref
+				templateInput.CommitTitle = event.Push.CommitTitle
+			}
+
+			t.Execute(os.Stdout, &templateInput)
+		}
+		time.Sleep(1 * time.Second)
+	}
 }
