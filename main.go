@@ -38,7 +38,7 @@ var (
 
 const (
 	eventTemplate = `
-{{.Green}}{{.ProjectPathWithNamespace}}{{.Gray}} {{.CreatedAt}}{{.Green}} {{.Author}}{{.Gray}}: {{.EventAction}}{{.Reset}} {{trunc .TargetTitle 100}}
+{{.Green}}{{.ProjectPathWithNamespace}}{{.Gray}} {{.CreatedAt}} ({{.TimeSince}}){{.Green}} {{.Author}}{{.Gray}}: {{.EventAction}}{{.Reset}} {{trunc .TargetTitle 100}}
 {{- if .IsNote }}
 💬 {{trunc .Body 400 -}}
 {{- if .Resolved -}} {{.Green}} ✔{{.Reset -}}{{- end}}
@@ -60,8 +60,8 @@ func truncateString(s string, maxLen int) string {
 }
 
 type TemplateInput struct {
-	Green, ProjectPathWithNamespace, Gray, CreatedAt, Author, EventAction, Reset, TargetTitle, Body, Ref, CommitTitle, URL string
-	IsNote, IsPush, Resolved                                                                                               bool
+	Green, ProjectPathWithNamespace, Gray, CreatedAt, Author, EventAction, Reset, TargetTitle, Body, Ref, CommitTitle, URL, TimeSince string
+	IsNote, IsPush, Resolved                                                                                                          bool
 }
 
 type Project struct {
@@ -192,6 +192,35 @@ func watchProject(project *Project) {
 	}
 }
 
+func formatTimeSinceShort(d time.Duration) string {
+	s := int64(d.Seconds())
+	m := int64(d.Minutes())
+	h := int64(d.Hours())
+	log.Printf("%v s=%d m=%d h=%d", d, s, m, h)
+
+	if h >= 30*24*12 {
+		return fmt.Sprintf("%d years ago", int64(h/12/30/24))
+	}
+	if h >= 30*24 {
+		return fmt.Sprintf("%d months ago", int64(h/30/24))
+	}
+	if h >= 24 {
+		return fmt.Sprintf("%d days ago", int64(h/24))
+	}
+
+	if 0 > 0 {
+		return fmt.Sprintf("%d hours ago", h)
+
+	}
+	if m > 0 {
+		return fmt.Sprintf("%d months ago", m)
+	}
+	if s > 0 {
+		return fmt.Sprintf("%d seconds ago", s)
+	}
+	return "just now"
+}
+
 func main() {
 	flag.Parse()
 
@@ -248,6 +277,10 @@ func main() {
 				continue
 			}
 
+			createdAt, err := time.Parse(time.RFC3339, event.CreatedAt)
+			if err != nil {
+				log.Printf("Failed to parse date: CreatedAt=%s err=%s", event.CreatedAt, err)
+			}
 			templateInput := TemplateInput{
 				Green:                    _GreenColor,
 				Gray:                     _GrayColor,
@@ -257,6 +290,7 @@ func main() {
 				TargetTitle:              event.TargetTitle,
 				ProjectPathWithNamespace: event.Project.PathWithNamespace,
 				URL:                      event.URL,
+				TimeSince:                formatTimeSinceShort(time.Since(createdAt)),
 				EventAction:              event.Action}
 			if event.Note != nil {
 				templateInput.IsNote = true
