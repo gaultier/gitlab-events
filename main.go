@@ -46,6 +46,7 @@ const (
 {{- if .IsPush }}
 ⬆️  {{.Ref}} {{.CommitTitle -}}
 {{- end}}
+{{ .URL }}
 `
 )
 
@@ -59,8 +60,8 @@ func truncateString(s string, maxLen int) string {
 }
 
 type TemplateInput struct {
-	Green, ProjectPathWithNamespace, Gray, CreatedAt, Author, EventAction, Reset, TargetTitle, Body, Ref, CommitTitle string
-	IsNote, IsPush, Resolved                                                                                          bool
+	Green, ProjectPathWithNamespace, Gray, CreatedAt, Author, EventAction, Reset, TargetTitle, Body, Ref, CommitTitle, URL string
+	IsNote, IsPush, Resolved                                                                                               bool
 }
 
 type Project struct {
@@ -70,9 +71,10 @@ type Project struct {
 }
 
 type Note struct {
-	Type     string
-	Body     string
-	Resolved bool
+	Type        string
+	Body        string
+	Resolved    bool
+	NoteableIID int64 `json:"noteable_iid"`
 }
 
 type Push struct {
@@ -88,17 +90,19 @@ type Event struct {
 	AuthorUsername string `json:"author_username"`
 	Action         string `json:"action_name"`
 	TargetTitle    string `json:"target_title"`
+	TargetIID      int64  `json:"target_iid"`
+	TargetType     string `json:"target_type"`
 	Note           *Note
 	Push           *Push `json:"push_data"`
 	Project        *Project
 	JSON           []byte
+	URL            string
 }
 
 func addEvents(events *[]Event) {
 	_EventsMutex.Lock()
 	defer _EventsMutex.Unlock()
 
-	log.Printf("New events: len=%d", len(*events))
 	for _, event := range *events {
 		hash := _Hasher.Sum(event.JSON)
 
@@ -106,19 +110,17 @@ func addEvents(events *[]Event) {
 		if !found {
 			_NewOrModifiedEvents = append(_NewOrModifiedEvents, event)
 			_EventChecksumsByID[event.ID] = hash
-			log.Printf("New event: projectID=%d id=%d", event.Project.ID, event.ID)
 			continue
 		}
 
 		if !bytes.Equal(hash, existingHash) { // Updated
 			_NewOrModifiedEvents = append(_NewOrModifiedEvents, event)
 			_EventChecksumsByID[event.ID] = hash
-			log.Printf("Updated event: projectID=%d id=%d", event.Project.ID, event.ID)
 		}
 	}
 }
 
-func fetchProjectEvents(url string, project *Project) error {
+func fetchProjectEvents(baseUrl string, url string, project *Project) error {
 	resp, err := http.Get(url)
 	if err != nil {
 		return err
@@ -130,6 +132,8 @@ func fetchProjectEvents(url string, project *Project) error {
 		return err
 	}
 
+	log.Printf("%s", body)
+
 	var events []Event
 	if err = json.Unmarshal(body, &events); err != nil {
 		// Could happen on 504 or such which returns html instead of json
@@ -139,6 +143,13 @@ func fetchProjectEvents(url string, project *Project) error {
 	for i := range events {
 		events[i].JSON, _ = json.Marshal(&events[i])
 		events[i].Project = project
+		if events[i].Note != nil {
+			events[i].URL = fmt.Sprintf("🔗 https://%s/%s/-/merge_requests/%d", baseUrl, project.PathWithNamespace, events[i].Note.NoteableIID)
+		} else if events[i].TargetType == "MergeRequest" {
+			events[i].URL = fmt.Sprintf("🔗 https://%s/%s/-/merge_requests/%d", baseUrl, project.PathWithNamespace, events[i].TargetIID)
+		} else {
+			events[i].URL = fmt.Sprintf("🔗 https://%s/%s", baseUrl, project.PathWithNamespace)
+		}
 	}
 	addEvents(&events)
 
@@ -172,7 +183,7 @@ func watchProject(project *Project) {
 	url := fmt.Sprintf("https://%s/api/v4/projects/%d/events?private_token=%s", *gitlabURL, project.ID, *token)
 
 	for {
-		if err := fetchProjectEvents(url, project); err != nil {
+		if err := fetchProjectEvents(*gitlabURL, url, project); err != nil {
 			log.Printf("Error when fetching events for project %d: %s", project.ID, err)
 			time.Sleep(1 * time.Second)
 		}
@@ -225,8 +236,7 @@ func main() {
 	for {
 		_EventsMutex.Lock()
 		events := make([]Event, len(_NewOrModifiedEvents))
-		copied := copy(events, _NewOrModifiedEvents)
-		log.Printf("Display: copied=%d len=%d %d", copied, len(events), len(_NewOrModifiedEvents))
+		copy(events, _NewOrModifiedEvents)
 		_NewOrModifiedEvents = nil
 		_EventsMutex.Unlock()
 		sort.Slice(events, func(i, j int) bool { return events[i].CreatedAt < events[j].CreatedAt })
@@ -246,6 +256,7 @@ func main() {
 				Author:                   event.AuthorUsername,
 				TargetTitle:              event.TargetTitle,
 				ProjectPathWithNamespace: event.Project.PathWithNamespace,
+				URL:                      event.URL,
 				EventAction:              event.Action}
 			if event.Note != nil {
 				templateInput.IsNote = true
