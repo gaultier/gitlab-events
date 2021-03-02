@@ -45,8 +45,8 @@ const (
 {{- end}}
 💬 {{trunc .Event.Note.Body 400 -}}
 {{- if .Event.Note.Resolved -}} {{.Green}} ✔{{.Reset -}}{{- end}}
-{{- else if or (eq .Event.Action "pushed to") (eq .Event.Action "pushed new") }}
-⬆️  {{.Event.Push.Ref}} {{.Event.Push.CommitTitle}} ({{.Event.Push.CommitCount}} commits)
+{{- else if or (eq .Event.Action "pushed to") (eq .Event.Action "pushed new") (eq .Event.Action "deleted") }}
+⬆️  {{.Event.Push.Ref}} {{.Event.Push.CommitTitle}}{{- if gt .Event.Push.CommitCount 0}} ({{.Event.Push.CommitCount}} commits){{end}}
 {{- end}}
 {{ .URL }}
 `
