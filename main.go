@@ -10,13 +10,13 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"sync"
 	"text/template"
 	"time"
 
-	// "github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
+	"github.com/mattn/go-isatty"
 )
 
 var (
@@ -27,13 +27,13 @@ var (
 )
 
 var (
-	_GreenColor         = "[green]"
-	_ResetColor         = "[white]"
-	_GrayColor          = "[gray]"
-	_EventByCreatedAt   = make(map[string]Event)
-	_EventChecksumsByID = make(map[int64][]byte)
-	_EventsMutex        = &sync.Mutex{}
-	_Hasher             = sha1.New()
+	_GreenColor                  = "\x1b[32m"
+	_ResetColor                  = "\x1b[0m"
+	_GrayColor                   = "\x1b[38;5;250m"
+	_NewOrModifiedEvents []Event = nil
+	_EventChecksumsByID          = make(map[int64][]byte)
+	_EventsMutex                 = &sync.Mutex{}
+	_Hasher                      = sha1.New()
 )
 
 const (
@@ -107,13 +107,13 @@ func addEvents(events *[]Event) {
 
 		existingHash, found := _EventChecksumsByID[event.ID]
 		if !found {
-			_EventByCreatedAt[event.CreatedAt] = event
+			_NewOrModifiedEvents = append(_NewOrModifiedEvents, event)
 			_EventChecksumsByID[event.ID] = hash
 			continue
 		}
 
 		if !bytes.Equal(hash, existingHash) { // Updated
-			_EventByCreatedAt[event.CreatedAt] = event
+			_NewOrModifiedEvents = append(_NewOrModifiedEvents, event)
 			_EventChecksumsByID[event.ID] = hash
 		}
 	}
@@ -224,16 +224,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	app := tview.NewApplication()
-	textView := tview.NewTextView().
-		SetDynamicColors(true).
-		SetRegions(true).
-		SetWordWrap(true).
-		SetChangedFunc(func() {
-			app.Draw()
-		})
-
-	textView.SetBorder(true)
+	if !isatty.IsTerminal(os.Stdout.Fd()) {
+		_GreenColor = ""
+		_ResetColor = ""
+		_GrayColor = ""
+	}
 
 	for _, projectIDStr := range projectIDsStr {
 		log.Printf("Handling projectID=%s", projectIDStr)
@@ -257,60 +252,55 @@ func main() {
 
 	t := template.Must(template.New("event").Funcs(template.FuncMap{"trunc": truncateString}).Parse(eventTemplate))
 
-	go func() {
-		for {
-			_EventsMutex.Lock()
-			events := make(map[string]Event)
-			for k, v := range _EventByCreatedAt {
-				events[k] = v
+	for {
+		_EventsMutex.Lock()
+		events := make([]Event, len(_NewOrModifiedEvents))
+		copy(events, _NewOrModifiedEvents)
+		_NewOrModifiedEvents = nil
+		_EventsMutex.Unlock()
+		sort.Slice(events, func(i, j int) bool { return events[i].CreatedAt < events[j].CreatedAt })
+
+		for _, event := range events {
+			if *jsonOutput {
+				fmt.Println(string(event.JSON))
+
+				continue
 			}
-			_EventsMutex.Unlock()
 
-			for _, event := range events {
-				if *jsonOutput {
-					fmt.Println(string(event.JSON))
-
-					continue
-				}
-
-				createdAt, err := time.Parse(time.RFC3339, event.CreatedAt)
-				if err != nil {
-					log.Printf("Failed to parse date: CreatedAt=%s err=%s", event.CreatedAt, err)
-				}
-
-				url := fmt.Sprintf("🔗 https://%s/%s", *gitlabURL, event.Project.PathWithNamespace)
-				if event.Note != nil {
-					url += fmt.Sprintf("/-/merge_requests/%d", event.Note.NoteableIID)
-				} else if event.TargetType == "MergeRequest" {
-					url = fmt.Sprintf("/-/merge_requests/%d", event.TargetIID)
-				}
-				templateInput := TemplateInput{
-					Green:                    _GreenColor,
-					Gray:                     _GrayColor,
-					Reset:                    _ResetColor,
-					CreatedAt:                event.CreatedAt,
-					Author:                   event.AuthorUsername,
-					TargetTitle:              event.TargetTitle,
-					ProjectPathWithNamespace: event.Project.PathWithNamespace,
-					URL:                      url,
-					TimeSince:                formatTimeSinceShort(time.Since(createdAt)),
-					EventAction:              event.Action}
-				if event.Note != nil {
-					templateInput.IsNote = true
-					templateInput.Resolved = event.Note.Resolved
-					templateInput.Body = event.Note.Body
-				} else if event.Push != nil {
-					templateInput.IsPush = true
-					templateInput.Ref = event.Push.Ref
-					templateInput.CommitTitle = event.Push.CommitTitle
-				}
-
-				t.Execute(textView, &templateInput)
+			createdAt, err := time.Parse(time.RFC3339, event.CreatedAt)
+			if err != nil {
+				log.Printf("Failed to parse date: CreatedAt=%s err=%s", event.CreatedAt, err)
 			}
-			time.Sleep(1 * time.Second)
+
+			url := fmt.Sprintf("🔗 https://%s/%s", *gitlabURL, event.Project.PathWithNamespace)
+			if event.Note != nil {
+				url += fmt.Sprintf("/-/merge_requests/%d", event.Note.NoteableIID)
+			} else if event.TargetType == "MergeRequest" {
+				url = fmt.Sprintf("/-/merge_requests/%d", event.TargetIID)
+			}
+			templateInput := TemplateInput{
+				Green:                    _GreenColor,
+				Gray:                     _GrayColor,
+				Reset:                    _ResetColor,
+				CreatedAt:                event.CreatedAt,
+				Author:                   event.AuthorUsername,
+				TargetTitle:              event.TargetTitle,
+				ProjectPathWithNamespace: event.Project.PathWithNamespace,
+				URL:                      url,
+				TimeSince:                formatTimeSinceShort(time.Since(createdAt)),
+				EventAction:              event.Action}
+			if event.Note != nil {
+				templateInput.IsNote = true
+				templateInput.Resolved = event.Note.Resolved
+				templateInput.Body = event.Note.Body
+			} else if event.Push != nil {
+				templateInput.IsPush = true
+				templateInput.Ref = event.Push.Ref
+				templateInput.CommitTitle = event.Push.CommitTitle
+			}
+
+			t.Execute(os.Stdout, &templateInput)
 		}
-	}()
-	if err := app.SetRoot(textView, true).Run(); err != nil {
-		panic(err)
+		time.Sleep(1 * time.Second)
 	}
 }
