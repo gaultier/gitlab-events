@@ -38,13 +38,12 @@ var (
 
 const (
 	eventTemplate = `
-{{.Green}}{{.ProjectPathWithNamespace}}{{.Gray}} {{.CreatedAt}} ({{.TimeSince}}){{.Green}} {{.Author}}{{.Gray}}: {{.EventAction}}{{.Reset}} {{trunc .TargetTitle 100}}
-{{- if .IsNote }}
-💬 {{trunc .Body 400 -}}
-{{- if .Resolved -}} {{.Green}} ✔{{.Reset -}}{{- end}}
-{{- end -}}
-{{- if .IsPush }}
-⬆️  {{.Ref}} {{.CommitTitle -}}
+{{.Green}}{{.Event.Project.PathWithNamespace}}{{.Gray}} {{.Event.CreatedAt}} ({{.TimeSince}}){{.Green}} {{.Event.AuthorUsername}}{{.Gray}}: {{.Event.Action}}{{.Reset}} {{trunc .Event.TargetTitle 100}}
+{{- if eq .Event.Action "commented on" }}
+💬 {{trunc .Event.Note.Body 400 -}}
+{{- if .Event.Note.Resolved -}} {{.Green}} ✔{{.Reset -}}{{- end}}
+{{- else if or (eq .Event.Action "pushed to") (eq .Event.Action "pushed new") }}
+⬆️  {{.Event.Push.Ref}} {{.Event.Push.CommitTitle}} ({{.Event.Push.CommitCount}} commits)
 {{- end}}
 {{ .URL }}
 `
@@ -60,8 +59,8 @@ func truncateString(s string, maxLen int) string {
 }
 
 type TemplateInput struct {
-	Green, ProjectPathWithNamespace, Gray, CreatedAt, Author, EventAction, Reset, TargetTitle, Body, Ref, CommitTitle, URL, TimeSince string
-	IsNote, IsPush, Resolved                                                                                                          bool
+	Green, Reset, ProjectPathWithNamespace, Gray, URL, TimeSince string
+	Event                                                        Event
 }
 
 type Project struct {
@@ -82,6 +81,7 @@ type Push struct {
 	RefType     string `json:"ref_type"`
 	Ref         string
 	CommitTitle string `json:"commit_title"`
+	CommitCount int64  `json:"commit_count"`
 }
 
 type Event struct {
@@ -277,24 +277,12 @@ func main() {
 				url += fmt.Sprintf("/-/merge_requests/%d", event.TargetIID)
 			}
 			templateInput := TemplateInput{
-				Green:                    _GreenColor,
-				Gray:                     _GrayColor,
-				Reset:                    _ResetColor,
-				CreatedAt:                event.CreatedAt,
-				Author:                   event.AuthorUsername,
-				TargetTitle:              event.TargetTitle,
-				ProjectPathWithNamespace: event.Project.PathWithNamespace,
-				URL:                      url,
-				TimeSince:                formatTimeSinceShort(time.Since(createdAt)),
-				EventAction:              event.Action}
-			if event.Note != nil {
-				templateInput.IsNote = true
-				templateInput.Resolved = event.Note.Resolved
-				templateInput.Body = event.Note.Body
-			} else if event.Push != nil {
-				templateInput.IsPush = true
-				templateInput.Ref = event.Push.Ref
-				templateInput.CommitTitle = event.Push.CommitTitle
+				Green:     _GreenColor,
+				Gray:      _GrayColor,
+				Reset:     _ResetColor,
+				Event:     event,
+				URL:       url,
+				TimeSince: formatTimeSinceShort(time.Since(createdAt)),
 			}
 
 			t.Execute(os.Stdout, &templateInput)
