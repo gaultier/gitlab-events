@@ -40,6 +40,9 @@ const (
 	eventTemplate = `
 {{.Green}}{{.Event.Project.PathWithNamespace}}{{.Gray}} {{.Event.UpdatedAt}} ({{.TimeSince}}){{.Green}} {{.Event.AuthorUsername}}{{.Gray}}: {{.Event.Action}}{{.Reset}} {{trunc .Event.TargetTitle 100}}
 {{- if eq .Event.Action "commented on" }}
+{{- if eq .Event.Note.Type "DiffNote" }}
+📃 {{.Gray}}{{.Event.Note.Position.NewPath}}:{{.Event.Note.Position.NewLine}}{{.Reset}}
+{{- end}}
 💬 {{trunc .Event.Note.Body 400 -}}
 {{- if .Event.Note.Resolved -}} {{.Green}} ✔{{.Reset -}}{{- end}}
 {{- else if or (eq .Event.Action "pushed to") (eq .Event.Action "pushed new") }}
@@ -69,11 +72,17 @@ type Project struct {
 	Name              string
 }
 
+type Position struct {
+	NewPath string `json:"new_path"`
+	NewLine int64  `json:"new_line"`
+}
+
 type Note struct {
 	Type        string
 	Body        string
 	Resolved    bool
 	NoteableIID int64 `json:"noteable_iid"`
+	Position    *Position
 }
 
 type Push struct {
