@@ -276,7 +276,7 @@ func main() {
 			if event.Note != nil {
 				url += fmt.Sprintf("/-/merge_requests/%d", event.Note.NoteableIID)
 			} else if event.TargetType == "MergeRequest" {
-				url = fmt.Sprintf("/-/merge_requests/%d", event.TargetIID)
+				url += fmt.Sprintf("/-/merge_requests/%d", event.TargetIID)
 			}
 			templateInput := TemplateInput{
 				Green:                    _GreenColor,
