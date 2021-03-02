@@ -188,7 +188,6 @@ func formatTimeSinceShort(d time.Duration) string {
 	s := int64(d.Seconds())
 	m := int64(d.Minutes())
 	h := int64(d.Hours())
-	log.Printf("%v s=%d m=%d h=%d", d, s, m, h)
 
 	if h >= 30*24*12 {
 		return fmt.Sprintf("%d years ago", int64(h/12/30/24))
@@ -231,7 +230,6 @@ func main() {
 	}
 
 	for _, projectIDStr := range projectIDsStr {
-		log.Printf("Handling projectID=%s", projectIDStr)
 		projectID, err := strconv.ParseInt(projectIDStr, 10, 64)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Invalid project id %s: %s\n", projectIDStr, err)
