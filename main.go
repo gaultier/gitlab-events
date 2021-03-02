@@ -38,7 +38,7 @@ var (
 
 const (
 	eventTemplate = `
-{{.Green}}{{.Event.Project.PathWithNamespace}}{{.Gray}} {{.Event.CreatedAt}} ({{.TimeSince}}){{.Green}} {{.Event.AuthorUsername}}{{.Gray}}: {{.Event.Action}}{{.Reset}} {{trunc .Event.TargetTitle 100}}
+{{.Green}}{{.Event.Project.PathWithNamespace}}{{.Gray}} {{.Event.UpdatedAt}} ({{.TimeSince}}){{.Green}} {{.Event.AuthorUsername}}{{.Gray}}: {{.Event.Action}}{{.Reset}} {{trunc .Event.TargetTitle 100}}
 {{- if eq .Event.Action "commented on" }}
 💬 {{trunc .Event.Note.Body 400 -}}
 {{- if .Event.Note.Resolved -}} {{.Green}} ✔{{.Reset -}}{{- end}}
@@ -87,6 +87,7 @@ type Push struct {
 type Event struct {
 	ID             int64
 	CreatedAt      string `json:"created_at"`
+	UpdatedAt      string `json:"updated_at"`
 	AuthorUsername string `json:"author_username"`
 	Action         string `json:"action_name"`
 	TargetTitle    string `json:"target_title"`
@@ -95,7 +96,7 @@ type Event struct {
 	Note           *Note
 	Push           *Push `json:"push_data"`
 	Project        *Project
-	JSON           []byte
+	json           []byte
 }
 
 func addEvents(events *[]Event) {
@@ -103,7 +104,7 @@ func addEvents(events *[]Event) {
 	defer _EventsMutex.Unlock()
 
 	for _, event := range *events {
-		hash := _Hasher.Sum(event.JSON)
+		hash := _Hasher.Sum(event.json)
 
 		existingHash, found := _EventChecksumsByID[event.ID]
 		if !found {
@@ -140,8 +141,11 @@ func fetchProjectEvents(url string, project *Project) error {
 	}
 
 	for i := range events {
-		events[i].JSON, _ = json.Marshal(&events[i])
+		events[i].json, _ = json.Marshal(&events[i])
 		events[i].Project = project
+		if events[i].UpdatedAt == "" {
+			events[i].UpdatedAt = events[i].CreatedAt
+		}
 	}
 	addEvents(&events)
 
@@ -256,18 +260,18 @@ func main() {
 		copy(events, _NewOrModifiedEvents)
 		_NewOrModifiedEvents = nil
 		_EventsMutex.Unlock()
-		sort.Slice(events, func(i, j int) bool { return events[i].CreatedAt < events[j].CreatedAt })
+		sort.Slice(events, func(i, j int) bool { return events[i].UpdatedAt < events[j].UpdatedAt })
 
 		for _, event := range events {
 			if *jsonOutput {
-				fmt.Println(string(event.JSON))
+				fmt.Println(string(event.json))
 
 				continue
 			}
 
-			createdAt, err := time.Parse(time.RFC3339, event.CreatedAt)
+			updatedAt, err := time.Parse(time.RFC3339, event.UpdatedAt)
 			if err != nil {
-				log.Printf("Failed to parse date: CreatedAt=%s err=%s", event.CreatedAt, err)
+				log.Printf("Failed to parse date: UpdatedAt=%s err=%s", event.UpdatedAt, err)
 			}
 
 			url := fmt.Sprintf("🔗 https://%s/%s", *gitlabURL, event.Project.PathWithNamespace)
@@ -282,7 +286,7 @@ func main() {
 				Reset:     _ResetColor,
 				Event:     event,
 				URL:       url,
-				TimeSince: formatTimeSinceShort(time.Since(createdAt)),
+				TimeSince: formatTimeSinceShort(time.Since(updatedAt)),
 			}
 
 			t.Execute(os.Stdout, &templateInput)
